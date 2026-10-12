@@ -16,8 +16,8 @@ Remake web del **modo duelo de Peggle Nights**, para jugar online con salas.
 |---|---|
 | 1. Lector de `.pak` y assets (incl. JPEG 2000) en el navegador | ✅ |
 | 2. Parser de niveles `.dat` (los 73 niveles validados byte a byte) y visor | ✅ (visor aproximado) |
-| 3. Ingeniería inversa: física, colisiones, puntaje y reglas del duelo | ⏳ siguiente |
-| 4. Simulación jugable local (bola, pegs, balde, fever, poderes) | — |
+| 3. Ingeniería inversa de la física ([docs/re/physics.md](docs/re/physics.md)) | ✅ núcleo (faltan ladrillos exactos) |
+| 4. Simulación jugable local | ⏳ física y disparo listos; faltan reglas, puntaje, balde, fever, poderes |
 | 5. Online: servidor de salas, lobby, sincronización de tiros | — |
 | 6. Sonido, música (`.mo3`), efectos, menús | — |
 
@@ -26,6 +26,8 @@ Remake web del **modo duelo de Peggle Nights**, para jugar online con salas.
 ```
 packages/formats   Parsers sin dependencias del DOM: .pak, niveles .dat,
                    resources.xml, stages.cfg (corren en Node y en el navegador)
+packages/sim       Simulación física determinista portada del ejecutable original
+                   (float32 por operación, trigonometría fdlibm propia)
 apps/web           Cliente web (Vite + TypeScript)
 tools/             Herramientas de desarrollo (validación, inspección, Ghidra)
 ```
@@ -54,6 +56,8 @@ Otros comandos:
 npm run typecheck
 node tools/validate-levels.ts "<carpeta de Peggle Nights>"   # parsea todos los niveles
 node tools/inspect.ts "<carpeta de Peggle Nights>"           # info de recursos
+node tools/sim-shot.ts "<carpeta>" Bjorn1 -60                 # simula un tiro sin interfaz
+node tools/tests/fdlibm-check.ts                              # trigonometría determinista
 ```
 
 ## Créditos

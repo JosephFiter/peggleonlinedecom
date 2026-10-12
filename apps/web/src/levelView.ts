@@ -17,8 +17,9 @@ export const BOARD_HEIGHT = 600;
  */
 export const LEVEL_ORIGIN: Vec2 = { x: 75, y: 40 };
 
-/** Rows of IMAGE_BALLPEG / IMAGE_BRICK sprite sheets (to be confirmed against the exe). */
-export const PegRow = { Blue: 0, Orange: 1, Green: 2, Purple: 3 } as const;
+/** Rows of IMAGE_BALLPEG / IMAGE_BRICK sprite sheets; the lit (hit) version is row + 4. */
+export const PegRow = { Blue: 0, Orange: 1, Purple: 2, Green: 3 } as const;
+export const LIT_ROW_OFFSET = 4;
 
 /** Default brick width when the level doesn't store one. */
 const DEFAULT_BRICK_WIDTH = 20;
@@ -37,15 +38,25 @@ export interface LoadedLevel {
   brickSprite: Sprite | null;
 }
 
-export async function loadLevelAssets(images: ImageStore, name: string, level: Level): Promise<LoadedLevel> {
+/** Level entries name images either by full pak path or by bare name in images/levels. */
+export function entryImagePath(image: string): string {
+  return image.includes('/') || image.includes('\\') ? image : `images/levels/${image}`;
+}
+
+export async function loadEntryImages(images: ImageStore, level: Level): Promise<Map<LevelEntry, Sprite>> {
   const entryImages = new Map<LevelEntry, Sprite>();
   await Promise.all(
     level.entries.map(async (e) => {
       if (!e.generic.image) return;
-      const s = await images.load(e.generic.image);
+      const s = await images.load(entryImagePath(e.generic.image));
       if (s) entryImages.set(e, s);
     }),
   );
+  return entryImages;
+}
+
+export async function loadLevelAssets(images: ImageStore, name: string, level: Level): Promise<LoadedLevel> {
+  const entryImages = await loadEntryImages(images, level);
   const [background, pegSprite, brickSprite] = await Promise.all([
     images.load(`levels/${name}`),
     images.resource('IMAGE_BALLPEG', 'Game'),

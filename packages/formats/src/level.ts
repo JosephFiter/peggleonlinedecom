@@ -86,15 +86,19 @@ export interface Movement {
   subMovementOffset?: Vec2;
   subMovement?: MovementLink;
   objectPos?: Vec2;
+  /** Object-reference id assigned while loading (see resolveReferences). */
+  refId?: number;
 }
 
 /**
  * id 0 = no movement, id 1 = movement stored inline, anything else refers to a
- * movement defined by an earlier entry (shared movement).
+ * movement read earlier in the file (shared movement); `target` is filled in
+ * by resolveReferences.
  */
 export interface MovementLink {
   id: number;
   movement?: Movement;
+  target?: Movement;
 }
 
 export interface GenericData {
@@ -112,7 +116,8 @@ export interface GenericData {
   shadow: boolean;
   rolly?: number;
   bouncy?: number;
-  unk4?: number;
+  /** Initial value of the object's movement tick counter (phase offset in ticks). */
+  tickOffset?: number;
   solidColor?: number;
   outlineColor?: number;
   image?: string;
@@ -261,6 +266,8 @@ export type EntryData = RodData | PolygonData | CircleData | BrickData | Telepor
 
 export interface LevelEntry {
   type: number;
+  /** Object-reference id assigned while loading (see resolveReferences). */
+  refId?: number;
   /** Byte offset of the entry in the file, for cross-referencing with hex dumps. */
   fileOffset: number;
   generic: GenericData;
@@ -301,7 +308,54 @@ export function parseLevel(bytes: Uint8Array): Level {
   if (r.remaining !== 0) {
     throw new LevelParseError(`${r.remaining} trailing bytes after last entry`, count, r.pos);
   }
-  return { version, headerByte, entries };
+  const level = { version, headerByte, entries };
+  resolveReferences(level);
+  return level;
+}
+
+/**
+ * The game's serializer registers every object it creates while reading
+ * (entries and inline movements) in an object table, and later references
+ * point back into that table by id. Ids are assigned in read order: the first
+ * entry gets 3 (one object is registered before the entries), then each object
+ * registered while reading it, depth first (entry, its movement chain, then
+ * entry-specific children such as a teleport's inner entry).
+ */
+export function resolveReferences(level: Level): void {
+  const table = new Map<number, LevelEntry | Movement>();
+  let next = 3;
+  const visitLink = (link: MovementLink | undefined): void => {
+    const m = link?.movement;
+    if (!m) return;
+    m.refId = next++;
+    table.set(m.refId, m);
+    visitLink(m.subMovement);
+  };
+  const visitEntry = (e: LevelEntry): void => {
+    e.refId = next++;
+    table.set(e.refId, e);
+    visitLink(e.generic.movementLink);
+    if (e.data.kind === 'teleport' && e.data.entry) visitEntry(e.data.entry);
+  };
+  level.entries.forEach(visitEntry);
+
+  const resolveLink = (link: MovementLink | undefined, where: LevelEntry): void => {
+    if (!link) return;
+    if (link.id > 1) {
+      const t = table.get(link.id);
+      if (!t || 'generic' in t) {
+        throw new Error(`entry @0x${where.fileOffset.toString(16)}: movement reference ${link.id} does not name a movement`);
+      }
+      link.target = t;
+      return;
+    }
+    resolveLink(link.movement?.subMovement, where);
+  };
+  const resolveEntry = (e: LevelEntry): void => {
+    resolveLink(e.generic.movementLink, e);
+    if (e.data.kind === 'teleport' && e.data.entry) resolveEntry(e.data.entry);
+  };
+  level.entries.forEach(resolveEntry);
 }
 
 function readEntry(r: BinaryReader, version: number): LevelEntry | null {
@@ -333,7 +387,7 @@ function readGeneric(r: BinaryReader, version: number): GenericData {
   };
   if (bit(f, 0)) g.rolly = r.f32();
   if (bit(f, 1)) g.bouncy = r.f32();
-  if (bit(f, 4)) g.unk4 = r.i32();
+  if (bit(f, 4)) g.tickOffset = r.i32();
   if (bit(f, 8)) g.solidColor = r.u32();
   if (bit(f, 9)) g.outlineColor = r.u32();
   if (bit(f, 10)) g.image = r.popcapString();

@@ -228,11 +228,83 @@ FPU en 24 bits, eso equivale a redondear a float32 después de **cada** operaci�
 - Para implementar, hay que seguir el **ensamblador** (`tools/ghidra/ExportAsm.java`),
   no solo el decompilado.
 
+## Clases (RTTI)
+
+Las vtables conservan los nombres de las clases (ver `tools/ghidra/ExportVtables.java`):
+`Sexy::PhysObj`, `Ball` (bola y pegs redondos), `Line`, `Poly`, `Brick`, `Gun`,
+`Hole`, `Mover`, `PegInfo`, `LogicMgr`, `AIMgr`/`AIBall`, `Board`, etc. El nombre
+interno del proyecto era `ThunderballApp`.
+
+Métodos virtuales comunes de PhysObj: `+0x44` SetPos, `+0x48` Move, `+0x4c` SetVel,
+`+0x58` Update (tick), `+0x5c` UpdateF (interpolación para dibujar, sin efecto físico).
+
+## Tick del tablero (`FUN_0040de20`)
+
+1. `Update()` de todos los objetos de la lista `+0x764`, en orden. Las bolas también
+   están en esa lista (se agregan al final al disparar).
+2. `Update()` del cañón.
+3. Pasada de colisiones `FUN_004547c0`. Se arman pares (bola, objeto) por
+   *sort-and-sweep* con AABB (comparación inclusiva) y, por cada bola con pares, se
+   llama a `FUN_00493390`.
+4. Las bolas sin intento de colisión (`+0x141 == 0`) hacen `Move(v)`.
+5. Bola perdida si `y − r > 570`, `x − r > 660`, `x + r < −10` o `y + r < −10`
+   (tablero de 650×560, `+0x780/+0x784`).
+6. `FUN_00471620`: la lógica procesa los choques encolados por el callback
+   `DAT_006cbdd4`.
+
+Orden de la lista de objetos: entradas del nivel, luego `_base.dat` (`FUN_00408c50`).
+Los candidatos de colisión se ordenan por puntero (orden de reserva de memoria); se
+aproxima con el orden de la lista. Solo importa en empates exactos de tiempo de
+impacto.
+
+## Movimiento (`Sexy::Mover`)
+
+- `PhysObj::Update` (`FUN_004a06b0`): si `canMove`, `tick++` y calcula. Si no, solo
+  recalcula si tiene padre. Después `SetPos(nueva)` y `SetVel(nueva − anterior)`.
+  El tick inicial es el campo `tickOffset` del nivel (bit 4 de los flags genéricos).
+- Fase (`FUN_0049d310`): aritmética entera (truncamiento hacia cero) con
+  `offset`, pausas (`pause1`/`pause2`, en ticks) en `phase1`/`phase2` (% del ciclo) y
+  `postDelayPhase`. El resultado es `(v mod período) / período`.
+- Posición (`FUN_0049d430`): 15 tipos (1 vaivén vertical, 2 horizontal, 3 círculo, 4/5
+  infinito, 6/7 arcos, 8 rotación, 9 rotación de ida y vuelta, 11/12 wrap, 13 rotar en
+  círculo, 14 círculo de ida y vuelta, 15 forma rara). Ángulo
+  `a = (fase · float(2π)) · dir`. Los tipos 13/14 con `radius2 ≠ 0` calculan la
+  orientación con `atan2` de la tangente. Al final se rota alrededor del ancla si
+  `moveRotation ≠ 0`.
+- Padre compartido: un sub-movimiento referencia otro `Mover` por id de objeto (ids
+  en orden de lectura, desde 3). Antes de calcular, el hijo suma al ancla el
+  desplazamiento del padre desde la última vez (`FUN_0049d240`).
+- Implementación: `packages/sim/src/mover.ts`.
+
+## Polígonos
+
+- `FUN_004a15a0`: un segmento por cada par de puntos consecutivos (la lista viene
+  cerrada). Un solo lado si `normalDir ≠ 0` (por defecto 1).
+- La escala solo la usa el editor: los puntos del archivo ya vienen escalados.
+- Normal del segmento (`FUN_0049afe0`): `normalizar(y1 − y2, x2 − x1)`.
+- `SetPos` solo traslada pos/AABB y marca "sucio". Los segmentos se actualizan al
+  usarlos (`FUN_004a2f30`).
+- Con `Mover`: rotación = la del mover. `omega` = diferencia respecto del tick
+  anterior, normalizada a [−π, π] (`FUN_004a35d0`).
+- Cerrado y convexo se calculan en `FUN_004a1920`. La detección de "bola adentro" usa
+  la distancia mínima (convexo) o la paridad de cruces (no convexo).
+
+## Disparo (`Gun::Shoot`, `FUN_00498e70`)
+
+- La bola se carga estática en el cañón (`FUN_00498da0`), en el punto de salida.
+- Al disparar: `vx = cos(a)·4`, `vy = −4·sin(a)`. Si el ángulo cambió en los últimos
+  10 ticks, usa un ángulo guardado (anti-temblor).
+- Radio de la bola: 6.0.
+- En el online se congela el cañón durante el tiro. El original le suma su velocidad
+  angular a la colisión con el cañón; solo importa si la bola toca el cañón mientras
+  rota.
+
 ## Pendiente
 
-- [ ] Movimiento de objetos (`Movement`): fórmulas por tipo.
-- [ ] Construcción de segmentos desde polígonos (escala, rotación) y ladrillos.
-- [ ] Detección de bola en el balde (teletransporte) y pérdida de la bola por abajo.
-- [ ] Golpe a pegs: marcado, eliminación al final del tiro, bola atascada.
-- [ ] Confirmar la frecuencia de tick (todo apunta a 100 Hz).
-- [ ] Reglas del duelo, puntaje y elección de pegs naranjas (RNG).
+- [ ] Geometría exacta de los ladrillos (`Brick`, ~`FUN_00495810`). Hoy se usa el
+      contorno aproximado.
+- [ ] Captura en el balde de bola gratis y su lógica.
+- [ ] Reglas: elección de pegs naranjas/verdes/violeta (RNG), puntaje, fever, poderes
+      de los maestros, turnos del duelo.
+- [ ] Rescate de bola atascada (`FUN_00472cb0`, usa `rand()`).
+- [ ] Confirmar 100 Hz.

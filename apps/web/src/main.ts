@@ -1,8 +1,10 @@
 import './style.css';
-import { parseLevel, EntryType } from '@peggle/formats';
+import { parseLevel, EntryType, type Level } from '@peggle/formats';
+import { Board } from '@peggle/sim';
 import { loadGameFiles, fromFolderPicker, GameFilesError, type GameFiles, type InstallFile } from './gameFiles.ts';
 import { ImageStore } from './images.ts';
-import { loadLevelAssets, renderLevel, type LoadedLevel } from './levelView.ts';
+import { loadEntryImages, loadLevelAssets, type LoadedLevel } from './levelView.ts';
+import { GameView, loadGameAssets } from './game.ts';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -10,15 +12,16 @@ const folderInput = $<HTMLInputElement>('folder');
 const statusEl = $<HTMLParagraphElement>('status');
 const viewer = $<HTMLElement>('viewer');
 const levelSelect = $<HTMLSelectElement>('level');
-const showImages = $<HTMLInputElement>('show-images');
 const showCollision = $<HTMLInputElement>('show-collision');
 const levelInfo = $<HTMLSpanElement>('level-info');
 const canvas = $<HTMLCanvasElement>('board');
-const ctx = canvas.getContext('2d')!;
+const shotInfo = $<HTMLSpanElement>('shot-info');
 
 let game: GameFiles | null = null;
 let images: ImageStore | null = null;
 let current: LoadedLevel | null = null;
+let view: GameView | null = null;
+let baseLevel: Level | null = null;
 let loadToken = 0;
 
 function setStatus(text: string, kind: 'ok' | 'err' | '' = ''): void {
@@ -55,6 +58,7 @@ async function openGame(files: InstallFile[]): Promise<void> {
   try {
     game = await loadGameFiles(files);
     images = new ImageStore(game.paks, game.manifest);
+    baseLevel = parseLevel(game.mainPak.read('levels/_base.dat'));
     const levelCount = game.stages.reduce((n, s) => n + s.levels.length, 0);
     setStatus(
       `Listo: ${levelCount} niveles en ${game.stages.length} etapas` +
@@ -98,10 +102,19 @@ async function showLevel(value: string): Promise<void> {
   try {
     const level = parseLevel(stage.pak.read(`levels/${entry.file}.dat`));
     const loaded = await loadLevelAssets(images, entry.file, level);
+    const baseImages = baseLevel ? await loadEntryImages(images, baseLevel) : new Map();
+    const assets = await loadGameAssets(images);
     if (token !== loadToken) return;
     current = loaded;
-    if (import.meta.env.DEV) (window as unknown as { __peggle: unknown }).__peggle = { game, images, current };
-    draw();
+    view?.destroy();
+    const board = new Board(level, baseLevel);
+    view = new GameView(canvas, loaded, board, assets, baseImages);
+    view.showCollision = showCollision.checked;
+    view.onShotEnd = (n) => {
+      shotInfo.textContent = `Último tiro: ${n} pegs tocados en ${view?.shotTicks ?? 0} ticks (${((view?.shotTicks ?? 0) / 100).toFixed(2)} s)`;
+    };
+    shotInfo.textContent = 'Apuntá con el mouse y hacé clic para disparar.';
+    if (import.meta.env.DEV) (window as unknown as { __peggle: unknown }).__peggle = { game, images, current, view };
     const pegs = level.entries.filter((e) => e.generic.peg);
     const circles = pegs.filter((e) => e.type === EntryType.Circle).length;
     const bricks = pegs.filter((e) => e.type === EntryType.Brick).length;
@@ -113,11 +126,7 @@ async function showLevel(value: string): Promise<void> {
   }
 }
 
-function draw(): void {
-  if (!current) return;
-  renderLevel(ctx, current, { showCollision: showCollision.checked, showImages: showImages.checked });
-}
-
 levelSelect.addEventListener('change', () => void showLevel(levelSelect.value));
-showImages.addEventListener('change', draw);
-showCollision.addEventListener('change', draw);
+showCollision.addEventListener('change', () => {
+  if (view) view.showCollision = showCollision.checked;
+});
