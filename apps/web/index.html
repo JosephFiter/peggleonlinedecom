@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Peggle Duel Online</title>
+  </head>
+  <body>
+    <header class="top">
+      <h1>Peggle Duel Online</h1>
+      <span class="tag">prototipo · visor de niveles</span>
+    </header>
+
+    <main>
+      <section id="setup" class="card">
+        <h2>1. Elegí tu carpeta de Peggle Nights</h2>
+        <p>
+          Seleccioná la carpeta donde está instalado el juego (la que tiene <code>PeggleNights.exe</code> y
+          <code>main.pak</code>). En Steam suele estar en
+          <code>steamapps\common\Peggle Nights</code>.
+        </p>
+        <p class="note">
+          Los archivos se leen solo en tu navegador. No se suben a ningún servidor.
+        </p>
+        <label class="button">
+          Elegir carpeta…
+          <input id="folder" type="file" webkitdirectory multiple hidden />
+        </label>
+        <button id="dev-load" class="button secondary" type="button" hidden>Usar juego local (dev)</button>
+        <p id="status" class="status" role="status"></p>
+      </section>
+
+      <section id="viewer" class="card" hidden>
+        <div class="toolbar">
+          <label>
+            Nivel
+            <select id="level"></select>
+          </label>
+          <label class="check"><input id="show-images" type="checkbox" checked /> Gráficos</label>
+          <label class="check"><input id="show-collision" type="checkbox" /> Ver colisiones</label>
+          <span id="level-info" class="info"></span>
+        </div>
+        <div class="board-wrap">
+          <canvas id="board" width="800" height="600"></canvas>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

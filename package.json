@@ -1,0 +1,19 @@
+{
+  "name": "peggle-duel-online",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @peggle/web",
+    "build": "npm run build -w @peggle/web",
+    "typecheck": "tsc -p tsconfig.json",
+    "validate-levels": "node tools/validate-levels.ts"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.0",
+    "typescript": "6.0.3"
+  }
+}

@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.log
+.vite/
+
+# Never commit anything extracted from the original game.
+extracted/
+game/
+*.pak
+*.mo3
+*.jp2
+*.local
+ghidra-export/
+ghidra-project/
